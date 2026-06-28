@@ -102,15 +102,10 @@ object TagEngine {
             
             val propertyMap = metadata.propertyMap
             
-            @Suppress("UNCHECKED_CAST")
+            // TagLib propertyMap values are always Array<String> (never List or Collection).
+            // item is Array<String>? — null when the key is absent, non-null otherwise.
             fun getFirstString(key: String): String {
-                val item = propertyMap[key]
-                if (item is Array<*>) {
-                    return (item as Array<Any?>).firstOrNull()?.toString() ?: ""
-                } else if (item is List<*>) {
-                    return (item as List<Any?>).firstOrNull()?.toString() ?: ""
-                }
-                return ""
+                return propertyMap[key]?.firstOrNull() ?: ""
             }
             
             val title = sanitizeUtf8(getFirstString("TITLE"))
@@ -270,20 +265,12 @@ object TagEngine {
                         rawFd = dupPfd.detachFd()
                         val existing = TagLib.getMetadata(rawFd, false)
                         success = true
+                        // TagLib propertyMap is Map<String, Array<String>>:
+                        //   - value is always Array<String>, never Collection (Array ≠ Collection in JVM)
+                        //   - String elements are non-nullable
+                        // Both former branches were identical; collapsed to a direct copyOf().
                         existing?.propertyMap?.forEach { (key, value) ->
-                            if (value is Collection<*>) {
-                                val stringList = ArrayList<String>()
-                                value.forEach { item ->
-                                    if (item != null) stringList.add(item.toString())
-                                }
-                                newMap[key as String] = stringList.toTypedArray()
-                            } else if (value is Array<*>) {
-                                val stringList = ArrayList<String>()
-                                value.forEach { item ->
-                                    if (item != null) stringList.add(item.toString())
-                                }
-                                newMap[key as String] = stringList.toTypedArray()
-                            }
+                            newMap[key] = value.copyOf()
                         }
                     }
                 } catch (e: Throwable) {
@@ -504,4 +491,3 @@ object TagEngine {
         return String.format(Locale.US, "%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
     }
 }
-

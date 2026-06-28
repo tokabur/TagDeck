@@ -3,7 +3,6 @@ package com.audiotageditor.data
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
-import android.content.Intent
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -164,11 +163,8 @@ class DefaultDataRepository : DataRepository {
                 if (path != null) {
                     val file = File(path)
                     if (file.exists()) {
-                        // Strategy 3: Broadcast file scan intent
-                        val scanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file))
-                        context.sendBroadcast(scanIntent)
-                        
-                        // Strategy 4: Modern MediaScannerConnection scan
+                        // Strategy 3: Modern MediaScannerConnection scan
+                        // (replaces deprecated Intent.ACTION_MEDIA_SCANNER_SCAN_FILE broadcast)
                         MediaScannerConnection.scanFile(context, arrayOf(path), null) { scannedPath, scannedUri ->
                             Log.d(TAG, "MediaScanner scanned: $scannedPath to $scannedUri")
                             if (scannedUri != null) {
