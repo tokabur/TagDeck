@@ -4,9 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import com.simplecityapps.ktaglib.KTagLib
-import com.simplecityapps.ktaglib.Metadata
-import com.simplecityapps.ktaglib.AudioProperties
+import com.kyant.taglib.TagLib
+import com.kyant.taglib.Metadata
+import com.kyant.taglib.AudioProperties
+import com.kyant.taglib.AudioPropertiesReadStyle
+import com.kyant.taglib.Picture
 import java.io.File
 import java.util.ArrayList
 import java.util.HashMap
@@ -14,15 +16,11 @@ import java.util.Locale
 
 object TagEngine {
     private const val TAG = "TagEngine"
-    private val kTagLib by lazy { KTagLib() }
     
     init {
         try {
             val file = File("/tmp/ktaglib_methods.txt")
             val sb = StringBuilder()
-            for (m in KTagLib::class.java.methods) {
-                sb.append(m.name).append(" ").append(m.parameterTypes.map { it.name }).append("\n")
-            }
             file.writeText(sb.toString())
         } catch(e: Exception) {}
     }
@@ -46,6 +44,9 @@ object TagEngine {
     }
 
     private fun sanitizeUtf8(input: String): String {
+        if (input.any { it.code > 255 }) {
+            return input
+        }
         return try {
             val bytes = input.toByteArray(Charsets.ISO_8859_1)
             String(bytes, Charsets.UTF_8)
@@ -61,6 +62,7 @@ object TagEngine {
             val sizeBytes = getFileSize(context, uri)
             
             var metadata: Metadata? = null
+            var audioProps: AudioProperties? = null
             var pfd1: ParcelFileDescriptor? = null
             var dupPfd: ParcelFileDescriptor? = null
             var rawFd = -1
@@ -70,7 +72,8 @@ object TagEngine {
                 if (pfd1 != null) {
                     dupPfd = pfd1.dup()
                     rawFd = dupPfd.detachFd()
-                    metadata = kTagLib.getMetadata(rawFd, ext)
+                    metadata = TagLib.getMetadata(rawFd, false)
+                    audioProps = TagLib.getAudioProperties(rawFd, AudioPropertiesReadStyle.Fast)
                     success = true
                 }
             } catch (e: Throwable) {
@@ -98,21 +101,31 @@ object TagEngine {
             if (metadata == null) return null
             
             val propertyMap = metadata.propertyMap
-            val audioProps = metadata.audioProperties
             
-            val title = sanitizeUtf8(propertyMap["TITLE"]?.firstOrNull() ?: "")
-            val artist = sanitizeUtf8(propertyMap["ARTIST"]?.firstOrNull() ?: "")
-            val album = sanitizeUtf8(propertyMap["ALBUM"]?.firstOrNull() ?: "")
-            val year = sanitizeUtf8(propertyMap["DATE"]?.firstOrNull() ?: "")
-            val genre = sanitizeUtf8(propertyMap["GENRE"]?.firstOrNull() ?: "")
-            val track = sanitizeUtf8(propertyMap["TRACKNUMBER"]?.firstOrNull() ?: "")
-            val albumArtist = sanitizeUtf8(propertyMap["ALBUMARTIST"]?.firstOrNull() ?: "")
-            val comment = sanitizeUtf8(propertyMap["COMMENT"]?.firstOrNull() ?: "")
-            val description = sanitizeUtf8(propertyMap["DESCRIPTION"]?.firstOrNull() ?: "")
-            val composer = sanitizeUtf8(propertyMap["COMPOSER"]?.firstOrNull() ?: "")
-            val discNumber = sanitizeUtf8(propertyMap["DISCNUMBER"]?.firstOrNull() ?: "")
+            @Suppress("UNCHECKED_CAST")
+            fun getFirstString(key: String): String {
+                val item = propertyMap[key]
+                if (item is Array<*>) {
+                    return (item as Array<Any?>).firstOrNull()?.toString() ?: ""
+                } else if (item is List<*>) {
+                    return (item as List<Any?>).firstOrNull()?.toString() ?: ""
+                }
+                return ""
+            }
             
-            val rawDuration = audioProps?.duration ?: 0
+            val title = sanitizeUtf8(getFirstString("TITLE"))
+            val artist = sanitizeUtf8(getFirstString("ARTIST"))
+            val album = sanitizeUtf8(getFirstString("ALBUM"))
+            val year = sanitizeUtf8(getFirstString("DATE"))
+            val genre = sanitizeUtf8(getFirstString("GENRE"))
+            val track = sanitizeUtf8(getFirstString("TRACKNUMBER"))
+            val albumArtist = sanitizeUtf8(getFirstString("ALBUMARTIST"))
+            val comment = sanitizeUtf8(getFirstString("COMMENT"))
+            val description = sanitizeUtf8(getFirstString("DESCRIPTION"))
+            val composer = sanitizeUtf8(getFirstString("COMPOSER"))
+            val discNumber = sanitizeUtf8(getFirstString("DISCNUMBER"))
+            
+            val rawDuration = audioProps?.length ?: 0
             val durationSec: Int
             val durationMs: Long
 
@@ -184,7 +197,7 @@ object TagEngine {
             pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
             dupPfd = pfd.dup()
             rawFd = dupPfd.detachFd()
-            val artwork = kTagLib.getArtwork(rawFd, ext)
+            val artwork = TagLib.getFrontCover(rawFd)?.data
             success = true
             return artwork
         } catch (e: Throwable) {
@@ -244,7 +257,7 @@ object TagEngine {
             } ?: return false
             
             // 3. Read existing tags or start fresh if stripAll is true
-            val newMap = HashMap<String, ArrayList<String?>>()
+            val newMap = HashMap<String, Array<String>>()
             if (!stripAll) {
                 var readPfd: ParcelFileDescriptor? = null
                 var dupPfd: ParcelFileDescriptor? = null
@@ -255,10 +268,22 @@ object TagEngine {
                     if (readPfd != null) {
                         dupPfd = readPfd.dup()
                         rawFd = dupPfd.detachFd()
-                        val existing = kTagLib.getMetadata(rawFd, ext)
+                        val existing = TagLib.getMetadata(rawFd, false)
                         success = true
                         existing?.propertyMap?.forEach { (key, value) ->
-                            newMap[key] = ArrayList(value)
+                            if (value is Collection<*>) {
+                                val stringList = ArrayList<String>()
+                                value.forEach { item ->
+                                    if (item != null) stringList.add(item.toString())
+                                }
+                                newMap[key as String] = stringList.toTypedArray()
+                            } else if (value is Array<*>) {
+                                val stringList = ArrayList<String>()
+                                value.forEach { item ->
+                                    if (item != null) stringList.add(item.toString())
+                                }
+                                newMap[key as String] = stringList.toTypedArray()
+                            }
                         }
                     }
                 } catch (e: Throwable) {
@@ -309,7 +334,12 @@ object TagEngine {
                     dupPfd = writePfd.dup()
                     rawFd = dupPfd.detachFd()
                     
-                    writeSuccess = kTagLib.writeMetadata(rawFd, newMap, ext)
+                    writeSuccess = TagLib.savePropertyMap(rawFd, newMap)
+                    
+                    if (removeCover) {
+                        TagLib.savePictures(rawFd, emptyArray<Picture>())
+                    }
+                    
                     success = true
                 }
             } catch (e: Throwable) {
@@ -334,21 +364,8 @@ object TagEngine {
                 }
             }
             
-            if (removeCover) {
-                try {
-                    val f = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
-                    val t = f.tag
-                    if (t != null) {
-                        t.deleteArtworkField()
-                        org.jaudiotagger.audio.AudioFileIO.write(f)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to remove cover with jaudiotagger", e)
-                }
-            }
-            
             if (!writeSuccess) {
-                Log.e(TAG, "KTagLib writeMetadata returned false")
+                Log.e(TAG, "TagLib savePropertyMap returned false")
                 return false
             }
             
@@ -404,12 +421,12 @@ object TagEngine {
         }
     }
 
-    private fun updateField(map: HashMap<String, ArrayList<String?>>, key: String, value: String?) {
+    private fun updateField(map: HashMap<String, Array<String>>, key: String, value: String?) {
         if (value != null) {
             if (value.isBlank()) {
                 map.remove(key)
             } else {
-                map[key] = arrayListOf(value)
+                map[key] = arrayOf(value)
             }
         }
     }

@@ -24,9 +24,27 @@ data class AudioMetadata(
     val comment: String = "",
     val description: String = "",
     val composer: String = "",
-    val discNumber: String = ""
+    val discNumber: String = "",
+    val hasPendingChanges: Boolean = false
 ) {
     val cleanFormat: String = format.substringAfterLast("/").substringAfterLast(".").uppercase().let {
         if (it.isBlank()) "AUDIO" else it
     }
 }
+
+@Immutable
+data class PendingTagUpdate(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val year: String? = null,
+    val genre: String? = null,
+    val track: String? = null,
+    val albumArtist: String? = null,
+    val comment: String? = null,
+    val description: String? = null,
+    val composer: String? = null,
+    val discNumber: String? = null,
+    val removeCover: Boolean = false,
+    val stripAll: Boolean = false
+)

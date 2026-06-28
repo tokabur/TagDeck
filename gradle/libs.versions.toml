@@ -54,8 +54,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.7.3" }
-ktaglib = { group = "com.github.timusus", name = "KTagLib", version = "1.6.0" }
-jaudiotagger = { group = "net.jthink", name = "jaudiotagger", version = "3.0.1" }
+kyant0-taglib = { group = "io.github.kyant0", name = "taglib", version = "1.0.6" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

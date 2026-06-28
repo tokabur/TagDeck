@@ -75,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.audiotageditor.data.AudioMetadata
+import com.audiotageditor.data.SettingsManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -535,6 +536,9 @@ fun EditorTextField(
     onActionChange: (String) -> Unit,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default
 ) {
+    val showRightChips by SettingsManager.showRightChips.collectAsState()
+    val showBottomStrip by SettingsManager.showBottomStrip.collectAsState()
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -550,7 +554,7 @@ fun EditorTextField(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (isBatch) {
+            if (isBatch && showRightChips) {
                 Row(
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
@@ -641,7 +645,7 @@ fun EditorTextField(
             singleLine = true
         )
 
-        if (isBatch && currentAction == "CHOOSE" && sharedValues.isNotEmpty()) {
+        if (isBatch && showBottomStrip && currentAction == "CHOOSE" && sharedValues.isNotEmpty()) {
             androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

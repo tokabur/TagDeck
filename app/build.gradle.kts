@@ -1,3 +1,5 @@
+import java.net.URLClassLoader
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.audiotageditor"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.aistudio.audiotageditor.xkldmr"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -85,8 +87,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences) // Activated for saving local app settings
 
     // Audio Processing Engines
-    implementation(libs.ktaglib)
-    implementation(libs.jaudiotagger) // Kept on standby if you switch tag engines
+    implementation(libs.kyant0.taglib)
 
     // Serialization & Data
     implementation(libs.kotlinx.serialization.json)

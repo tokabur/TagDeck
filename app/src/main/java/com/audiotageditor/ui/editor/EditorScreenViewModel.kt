@@ -266,8 +266,7 @@ class EditorScreenViewModel(private val repository: DataRepository) : ViewModel(
                 }
             }
 
-            val success = repository.updateTags(
-                context = context,
+            repository.stageTagUpdates(
                 uris = uris,
                 title = if (isBatch) null else state.title,
                 artist = getVal("artist", state.artist),
@@ -285,12 +284,8 @@ class EditorScreenViewModel(private val repository: DataRepository) : ViewModel(
             
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                saveSuccess = success
+                saveSuccess = true
             )
-
-            if (success) {
-                // UI feedback handled in EditorScreen LaunchedEffect
-            }
         }
     }
 

@@ -62,11 +62,28 @@ class LibraryScreenViewModel(private val repository: DataRepository) : ViewModel
     fun renameSelectedFiles(context: Context, template: String, onComplete: () -> Unit) {
         val selected = _selectedUris.value.toList()
         if (selected.isEmpty()) return
+        repository.stageRenameTemplate(selected, template)
+        _selectedUris.value = emptySet()
+        onComplete()
+    }
+
+    val pendingTagUpdates = repository.pendingTagUpdates
+    val pendingRenames = repository.pendingRenames
+
+    fun commitPendingChanges(context: Context, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            repository.renameFiles(context, selected, template)
-            _selectedUris.value = emptySet()
-            onComplete()
+            val success = repository.commitPendingChanges(context)
+            onComplete(success)
         }
+    }
+
+    fun clearPendingChanges() {
+        repository.clearPendingChanges()
+    }
+
+    fun clearAllLoaded() {
+        _selectedUris.value = emptySet()
+        repository.clearAllLoaded()
     }
 
     fun extractTagsFromFilenames(context: Context, pattern: String, onComplete: () -> Unit) {

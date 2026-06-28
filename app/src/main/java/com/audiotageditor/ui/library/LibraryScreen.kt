@@ -40,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Edit
@@ -84,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.audiotageditor.data.AudioMetadata
+import com.audiotageditor.data.SettingsManager
 import com.audiotageditor.theme.ThemeManager
 import com.audiotageditor.theme.ThemeMode
 
@@ -102,6 +104,12 @@ fun LibraryScreen(
     val selectedCount by remember { derivedStateOf { selectedUris.size } }
     val isLoading by viewModel.isLoading.collectAsState()
     val currentFolderUri by viewModel.currentFolderUri.collectAsState()
+
+    val pendingTags by viewModel.pendingTagUpdates.collectAsState()
+    val pendingRenames by viewModel.pendingRenames.collectAsState()
+    val hasPending = remember(pendingTags, pendingRenames) {
+        pendingTags.isNotEmpty() || pendingRenames.isNotEmpty()
+    }
 
     // Launcher for individual audio files selection
     val fileLauncher = rememberLauncherForActivityResult(
@@ -170,12 +178,15 @@ fun LibraryScreen(
                         }
                     }
 
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    // Tapping this resets the app to the initial Import screen
+                    if (files.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.clearAllLoaded() }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear All Files",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -185,7 +196,7 @@ fun LibraryScreen(
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = selectedCount > 0,
+                visible = files.isNotEmpty(),
                 enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
                 exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
             ) {
@@ -200,38 +211,70 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
-                            onClick = { onEditSelected(selectedUris.toList()) }
+                            onClick = { 
+                                onEditSelected(if (selectedCount > 0) selectedUris.toList() else files.map { it.uriString }) 
+                            }
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = if (selectedCount == 1) Icons.Default.Edit else Icons.Default.AutoAwesome, contentDescription = "Edit")
-                                Text("Edit")
+                                Icon(
+                                    imageVector = if (selectedCount == 1) Icons.Default.Edit else Icons.Default.AutoAwesome, 
+                                    contentDescription = "Edit",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("Edit", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                         
                         TextButton(
-                            onClick = { onNavigateToRename(selectedUris.toList()) }
+                            onClick = { 
+                                onNavigateToRename(if (selectedCount > 0) selectedUris.toList() else files.map { it.uriString }) 
+                            }
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.DriveFileRenameOutline, contentDescription = "Rename")
-                                Text("Rename")
+                                Icon(
+                                    imageVector = Icons.Default.DriveFileRenameOutline, 
+                                    contentDescription = "Rename",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("Rename", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                         
                         TextButton(
-                            onClick = { /* TODO: Apply pending inline modifications */ }
+                            enabled = hasPending && !isLoading,
+                            onClick = {
+                                viewModel.commitPendingChanges(context) { success ->
+                                    if (success) {
+                                        android.widget.Toast.makeText(context, "Successfully saved all changes to disk!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Failed to write changes.", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Save, contentDescription = "Save Changes")
-                                Text("Save")
+                                Icon(
+                                    imageVector = Icons.Default.Save, 
+                                    contentDescription = "Save Changes",
+                                    tint = if (hasPending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                )
+                                Text(
+                                    text = "Save",
+                                    color = if (hasPending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                )
                             }
                         }
                         
                         TextButton(
-                            onClick = { viewModel.deselectAll() }
+                            onClick = onNavigateToSettings
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Deselect, contentDescription = "Clear")
-                                Text("Clear")
+                                Icon(
+                                    imageVector = Icons.Default.Settings, 
+                                    contentDescription = "Settings",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("Settings", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -317,6 +360,8 @@ fun AudioItemCard(
         val selectedBorder = remember(primaryColor) { BorderStroke(1.dp, primaryColor) }
         val defaultBorder = remember(outlineVariantColor) { BorderStroke(1.dp, outlineVariantColor) }
         
+        val showAdvancedInfo by SettingsManager.showAdvancedInfo.collectAsState()
+        
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -364,16 +409,39 @@ fun AudioItemCard(
                         .weight(1f)
                         .padding(end = 4.dp)
                 ) {
-                    Text(
-                        text = item.title.ifBlank { item.fileName },
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            textDirection = androidx.compose.ui.text.style.TextDirection.Content
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = item.title.ifBlank { item.fileName },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                textDirection = androidx.compose.ui.text.style.TextDirection.Content
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (item.hasPendingChanges) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "STAGED",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(2.dp))
 
@@ -400,39 +468,43 @@ fun AudioItemCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FormatBadge(format = item.cleanFormat)
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
+                        if (showAdvancedInfo) {
+                            FormatBadge(format = item.cleanFormat)
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
                         Text(
                             text = item.durationFormatted,
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (item.bitrate.isNotBlank() && item.bitrate != "Unknown kbps") {
+                        if (showAdvancedInfo) {
+                            if (item.bitrate.isNotBlank() && item.bitrate != "Unknown kbps") {
+                                Text(
+                                    text = "•",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    text = item.bitrate,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Text(
                                 text = "•",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                             Text(
-                                text = item.bitrate,
+                                text = item.sizeFormatted,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = item.sizeFormatted,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }

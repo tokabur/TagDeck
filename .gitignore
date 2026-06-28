@@ -1,7 +1,7 @@
 *.iml
 .gradle
 .kotlin
-/build
+/build/**
 /docs
 app/build/
 .properties
@@ -11,3 +11,4 @@ app/build/
 *.keystore
 .env.example
 
+local.properties
